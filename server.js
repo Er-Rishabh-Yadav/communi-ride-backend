@@ -7,6 +7,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const connectDB = require('./helper/dbconfig');
+const socket = require("socket.io");
 // Middleware
 app.use(bodyParser.json());
 connectDB();
@@ -25,13 +26,35 @@ function authenticateToken(req, res, next) {
 // app.use(authenticateToken)
 
 // Define your routes here
-const apiRoutes = require('./routes/api');
+const messageRoutes = require('./routes/message');
 const authRoutes = require('./routes/auth');
-const dashRoutes = require('./routes/dashboard');
+const commRoutes = require('./routes/community');
 
-app.use('/api',apiRoutes);
+app.use('/message',messageRoutes);
 app.use('/auth',authRoutes);    
-app.use('/dash',authenticateToken,dashRoutes);
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+app.use('/comm',commRoutes);
+
+const server = app.listen(process.env.PORT || 5000, () =>
+  console.log(`Server started on ${process.env.PORT}`)
+);
+const io = socket(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    credentials: true,
+  },
+});
+
+global.onlineUsers = new Map();
+io.on("connection", (socket) => {
+  global.chatSocket = socket;
+  socket.on("add-user", (userId) => {
+    onlineUsers.set(userId, socket.id);
+  });
+
+  socket.on("send-msg", (data) => {
+    const sendUserSocket = onlineUsers.get(data.to);
+    if (sendUserSocket) {
+      socket.to(sendUserSocket).emit("msg-recieve", data.msg);
+    }
+  });
 });
